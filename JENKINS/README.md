@@ -5,8 +5,7 @@ Este directorio contiene los archivos necesarios para configurar y ejecutar pipe
 ## Tabla de Contenidos
 
 1. [Descripción del Proyecto](#descripción-del-proyecto)
-2. [Estructura del Directorio](#estructura-del-directorio)
-3. [Configuración y Uso](#configuración-y-uso)
+2. [Configuración y Uso](#configuración-y-uso)
 
 ---
 
