@@ -1,0 +1,99 @@
+pipeline {
+    agent {
+            label 'local'
+        }
+    environment {
+        SONAR_TOKEN = credentials('sonarcloud.io')
+        SONAR_PROJECT_KEY = 'Thecode42_Demo-DevOps-Java'
+        SONAR_ORGANIZATION = 'thecode42'
+        
+        F_VAR_credential_name = 'aws_credential_test'
+        AWS_AID     = credentials('AWS_ACCOUNT_ID')
+        AWS_REGION         = 'us-east-1'
+        IMAGE_REPO_NAME    = 'dev/thecode42'
+        IMAGE_TAG          = "v${BUILD_NUMBER}"
+        REPO_URI = "${AWS_AID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO_NAME}"
+    }
+    stages {
+        stage('Clone Repository') {
+            steps {
+                sh 'rm -rf *'
+                git branch: 'main', url: 'https://github.com/Thecode42/Demo-DevOps-Java.git'
+            }
+        }
+        stage('Build') {
+            steps {
+                sh '''
+                mvn clean install -DskipTests
+                '''
+            }
+        }
+        stage('Test & Coverage') {
+            steps {
+                sh 'mvn verify'
+            }
+        }
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    // Análisis de código estático con SonarCloud
+                    withSonarQubeEnv('SonarCloud') {
+                        sh '''
+                            mvn sonar:sonar \
+                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                -Dsonar.organization=${SONAR_ORGANIZATION} \
+                                -Dsonar.host.url=https://sonarcloud.io \
+                                -Dsonar.login=${SONAR_TOKEN} \
+                                -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                        '''
+                    }
+                }
+            }
+        }
+        stage('Quality Gate') {
+            steps {
+                sh 'echo "sale bien"'
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        stage('Login to AWS ECR') {
+            steps {
+                script {
+                    withAWS(credentials: 'aws_credential_test', region: 'us-east-1') {
+                        sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_AID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                    }
+                }
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                withAWS(credentials: 'aws_credential_test', region: 'us-east-1') {
+                    script {
+                        env.FULL_IMAGE_NAME = "${REPO_URI}:${IMAGE_TAG}"
+                        sh "docker build -t ${FULL_IMAGE_NAME} ."
+                    }
+                }
+            }
+        }
+        stage('Push Docker Image to ECR') {
+            steps {
+                script {
+                    sh 'echo "Pushing Docker image to ECR..."'
+                    sh "docker push ${FULL_IMAGE_NAME}"
+                }
+            }
+        }
+        stage('Deploy Apps Helm') {
+            steps {
+                script {
+                    build job: 'PR_01_DEPLOY_HELM', 
+                          parameters: [
+                              string(name: 'AMI_ID', value: FULL_IMAGE_NAME)
+                          ]
+                }
+            }
+        }
+    }
+}

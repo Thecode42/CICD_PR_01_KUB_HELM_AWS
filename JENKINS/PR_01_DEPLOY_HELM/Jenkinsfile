@@ -1,0 +1,68 @@
+pipeline {
+    agent {
+            label 'local'
+        }
+
+    parameters {
+        string(
+            name: 'AMI_ID', 
+            defaultValue: '140023396978.dkr.ecr.us-east-1.amazonaws.com/dev/thecode42:v16', 
+            description: 'ID de la AMI a usar para el despliegue'
+        )
+        booleanParam(name: 'DESTROY_RELEASE', defaultValue: false, description: 'True para desplegar Helm release')
+    }
+    environment {
+        HELM_DIR = "${WORKSPACE}/HELM-DEPLOYMENT"
+        HELM_RELEASE_NAME = "release-01"
+        NAMESPACE = "default"
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                sh 'rm -rf *'
+                git branch: 'main', url: 'https://github.com/Thecode42/CICD_PR_01_KUB_HELM_AWS.git'
+            }
+        }
+        stage('Deploy or Update with Helm') {
+            steps {
+                script{
+                    def releaseExists = sh(script: "helm status ${HELM_RELEASE_NAME} --namespace ${NAMESPACE} > /dev/null 2>&1 && echo 'true' || echo 'false'", returnStdout: true).trim()
+                    if (releaseExists == "true") {
+                        sh '''
+                        echo "Release ${HELM_RELEASE_NAME} already exists. Upgrading..."
+                        cd ${HELM_DIR} &&
+                        helm upgrade ${HELM_RELEASE_NAME} . --namespace ${NAMESPACE}
+                        '''
+                    }else {
+                        sh '''
+                        echo "Release ${HELM_RELEASE_NAME} does not exist. Installing..."
+                        cd ${HELM_DIR} &&
+                        helm install ${HELM_RELEASE_NAME} . --set image.repository=$AMI_ID --namespace ${NAMESPACE}
+                        '''
+                    }
+                    
+                }
+            }
+        }
+        stage('Destroy Release') {
+            when {
+                expression { return params.DESTROY_RELEASE }
+            }
+            steps {
+                script {
+                    def releaseExists = sh(script: "helm status ${HELM_RELEASE_NAME} --namespace ${NAMESPACE} > /dev/null 2>&1 && echo 'true' || echo 'false'", returnStdout: true).trim()
+                    if (releaseExists == "true") {
+                        echo "Destroying release ${HELM_RELEASE_NAME} in namespace ${NAMESPACE}..."
+                        sh '''
+                        cd ${HELM_DIR} &&
+                        helm uninstall ${HELM_RELEASE_NAME} --namespace ${NAMESPACE}
+                        '''
+                    } else {
+                        echo "Release ${HELM_RELEASE_NAME} does not exist. Nothing to destroy."
+                    }
+                }
+            }
+        }
+    }
+}
