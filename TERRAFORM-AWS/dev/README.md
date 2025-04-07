@@ -6,10 +6,7 @@ Este repositorio contiene la configuración de infraestructura como código (IaC
 
 1. [Descripción del Proyecto](#descripción-del-proyecto)
 2. [Arquitectura de la Infraestructura](#arquitectura-de-la-infraestructura)
-3. [Requisitos Previos](#requisitos-previos)
-4. [Configuración y Uso](#configuración-y-uso)
-5. [Diagrama de Infraestructura](#diagrama-de-infraestructura)
-6. [Contribuciones](#contribuciones)
+3. [Diagrama de Infraestructura](#diagrama-de-infraestructura)
 
 ---
 
